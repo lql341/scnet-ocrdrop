@@ -1,0 +1,22 @@
+#!/bin/bash
+set -u
+
+: "${PADDLEOCR_ROOT:?set PADDLEOCR_ROOT}"
+: "${MINERU_VENV:?set MINERU_VENV}"
+: "${GLIBC_ROOT:?set GLIBC_ROOT}"
+: "${GCC_ROOT:?set GCC_ROOT}"
+: "${DTK_ROOT:?set DTK_ROOT}"
+: "${MINICONDA_LIB:?set MINICONDA_LIB}"
+
+LD_SO="$GLIBC_ROOT/lib64/ld-linux-x86-64.so.2"
+PYTHON="$PADDLEOCR_ROOT/bin/python3.10"
+ALL_LIBS="$GLIBC_ROOT/lib64:$MINICONDA_LIB:$GCC_ROOT/lib64:"
+ALL_LIBS+="$DTK_ROOT/.hyhal/rocm_smi/lib:$DTK_ROOT/lib:$DTK_ROOT/lib64:"
+ALL_LIBS+="$DTK_ROOT/hip/lib:$DTK_ROOT/dcc/lib:$DTK_ROOT/dcc/gcvm/lib:"
+ALL_LIBS+="/usr/local/lib64:/usr/lib64"
+
+export PYTHONNOUSERSITE=1
+export PYTHONPATH="$PADDLEOCR_ROOT/lib/python3.10/site-packages:"
+export PYTHONPATH+="$MINERU_VENV/lib/python3.10/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+
+exec "$LD_SO" --library-path "$ALL_LIBS" "$PYTHON" "$@"

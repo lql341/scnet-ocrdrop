@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export OCRDROP_TRANSPORT="ssh"
+export OCRDROP_BACKEND="mineru3"
+export OCRDROP_SSH="${OCRDROP_SSH:-kseshell}"
+export OCRDROP_REMOTE_ROOT="softwares/projects/scnet-ocrdrop/deployments/mineru3"
+exec "$PROJECT_ROOT/bin/scnet-ocrdrop" "$@"

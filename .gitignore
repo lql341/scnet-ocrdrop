@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+build/
+dist/
+.venv/
+venv/
+.env
+.env.*
+*.pem
+*.key
+*credentials*.json
+*authorization*.json
+
+# Real cluster profiles and launchers
+config.local/*
+!config.local/.gitkeep
+
+# User documents and generated results
+*.pdf
+ocrdrop-results/
+mineru-results/
+logs/
+*.log
+*.out
+*.err
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,14 @@
+#!/bin/bash
+# Example launcher for a MinerU runtime that needs a custom glibc.
+set -u
+
+: "${GLIBC_ROOT:?set GLIBC_ROOT}"
+: "${GCC_ROOT:?set GCC_ROOT}"
+: "${DTK_ROOT:?set DTK_ROOT}"
+: "${VENV:?set VENV}"
+
+LD_SO="$GLIBC_ROOT/lib64/ld-linux-x86-64.so.2"
+PYTHON="$VENV/bin/python3.10"
+ALL_LIBS="$GLIBC_ROOT/lib64:$GCC_ROOT/lib64:$DTK_ROOT/.hyhal/rocm_smi/lib:$DTK_ROOT/lib:$DTK_ROOT/lib64:$DTK_ROOT/hip/lib:$DTK_ROOT/dcc/lib:$DTK_ROOT/dcc/gcvm/lib:/usr/local/lib64:/usr/lib64"
+
+exec "$LD_SO" --library-path "$ALL_LIBS" "$PYTHON" "$@"

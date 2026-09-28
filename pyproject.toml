@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scnet-ocrdrop"
+version = "0.4.0"
+description = "Slurm-native document parsing queue with pluggable OCR backends"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+authors = [
+  {name = "lql341"}
+]
+keywords = ["slurm", "ocr", "hpc", "scnet", "mineru", "paddleocr"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/lql341/scnet-ocrdrop"
+Repository = "https://github.com/lql341/scnet-ocrdrop"
+Issues = "https://github.com/lql341/scnet-ocrdrop/issues"
+
+[project.scripts]
+scnet-ocrdrop = "ocrdrop.client:main"
+
+[tool.setuptools]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

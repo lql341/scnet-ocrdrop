@@ -1,0 +1,33 @@
+{
+  "root": "/shared/home/USER/softwares/projects/scnet-ocrdrop/deployments/mineru3",
+  "partition_dcu": "DCU_PARTITION",
+  "partition_cpu": "CPU_PARTITION",
+  "gres": "dcu:1",
+  "cpus_per_worker": 8,
+  "memory_per_worker": "27gb",
+  "worker_walltime": "08:00:00",
+  "merge_walltime": "00:30:00",
+  "max_workers": 4,
+  "backend": "mineru3",
+  "chunk_pages": 96,
+  "whole_document_pages": 128,
+  "language": "ch",
+  "parse_method": "auto",
+  "formula_enable": true,
+  "table_enable": true,
+  "thread_count": 8,
+  "venv": "/shared/home/USER/softwares/projects/scnet-ocrdrop/runtimes/mineru3",
+  "python_launcher": "/shared/home/USER/softwares/projects/scnet-ocrdrop/deployments/mineru3/app/dcu-python",
+  "model_config": "/shared/home/USER/softwares/projects/scnet-ocrdrop/runtimes/mineru3-model-config.json",
+  "module_loads": [
+    "compiler/gcc/12.2.0",
+    "compiler/dtk/26.04"
+  ],
+  "python_module": "python/3.8.10",
+  "runtime_env": {
+    "GLIBC_ROOT": "/shared/home/USER/softwares/projects/scnet-ocrdrop/runtimes/glibc-2.28",
+    "GCC_ROOT": "/shared/software/gcc-12.2.0",
+    "DTK_ROOT": "/shared/software/dtk",
+    "VENV": "/shared/home/USER/softwares/projects/scnet-ocrdrop/runtimes/mineru3"
+  }
+}
