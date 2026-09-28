@@ -354,6 +354,37 @@ class SCNetOpenAPI:
             self._center_cache[region_id] = data
         return self._center_cache[region_id], token, region
 
+    def discover_context(self, region: str) -> Dict[str, Any]:
+        center, token, selected = self.center(region)
+        hpc_url = self.enabled_url(center, "hpcUrls")
+        efile_url = self.enabled_url(center, "efileUrls")
+        schedulers = self.request(
+            "GET",
+            service_endpoint(hpc_url, "hpc", "/openapi/v2/cluster"),
+            token=token,
+        )
+        if not isinstance(schedulers, list):
+            schedulers = []
+        user_info = center.get("clusterUserInfo") or {}
+        return {
+            "region_id": str(selected.get("clusterId") or region),
+            "region_name": selected.get("clusterName") or center.get("name"),
+            "username": user_info.get("userName"),
+            "home_path": user_info.get("homePath"),
+            "hpc_url": hpc_url,
+            "efile_url": efile_url,
+            "token": token,
+            "schedulers": [
+                {
+                    "id": str(item.get("id", "")),
+                    "name": item.get("text"),
+                    "type": item.get("JobManagerType"),
+                }
+                for item in schedulers
+                if isinstance(item, dict)
+            ],
+        }
+
     def discover_contexts(self) -> List[Dict[str, Any]]:
         contexts = []
         for region in self.regions():
@@ -361,40 +392,9 @@ class SCNetOpenAPI:
             if region_id == "0" or not region.get("token"):
                 continue
             try:
-                center, token, selected = self.center(region_id)
-                hpc_url = self.enabled_url(center, "hpcUrls")
-                efile_url = self.enabled_url(center, "efileUrls")
+                contexts.append(self.discover_context(region_id))
             except OpenAPIError:
                 continue
-            schedulers = self.request(
-                "GET",
-                service_endpoint(hpc_url, "hpc", "/openapi/v2/cluster"),
-                token=token,
-            )
-            if not isinstance(schedulers, list):
-                schedulers = []
-            user_info = center.get("clusterUserInfo") or {}
-            contexts.append(
-                {
-                    "region_id": str(selected.get("clusterId") or region_id),
-                    "region_name": selected.get("clusterName")
-                    or center.get("name"),
-                    "username": user_info.get("userName"),
-                    "home_path": user_info.get("homePath"),
-                    "hpc_url": hpc_url,
-                    "efile_url": efile_url,
-                    "token": token,
-                    "schedulers": [
-                        {
-                            "id": str(item.get("id", "")),
-                            "name": item.get("text"),
-                            "type": item.get("JobManagerType"),
-                        }
-                        for item in schedulers
-                        if isinstance(item, dict)
-                    ],
-                }
-            )
         return contexts
 
     def resolve_context(
@@ -405,18 +405,12 @@ class SCNetOpenAPI:
             return self._context_cache[cache_key]
         selected = self.select_region(region)
         selected_id = str(selected.get("clusterId", ""))
-        context = next(
-            (
-                item
-                for item in self.discover_contexts()
-                if item["region_id"] == selected_id
-            ),
-            None,
-        )
-        if not context:
+        try:
+            context = self.discover_context(selected_id)
+        except OpenAPIError as exc:
             raise OpenAPIError(
                 "selected region does not expose HPC and file services"
-            )
+            ) from exc
         schedulers = context.get("schedulers") or []
         requested = scheduler_id or self.env("SCNET_OPENAPI_SCHEDULER_ID")
         scheduler = None

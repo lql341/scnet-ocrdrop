@@ -331,6 +331,26 @@ def parser():
         action="store_true",
         help="with reset, also delete credentials from the system store",
     )
+    setup.add_argument(
+        "--enable-region",
+        dest="setup_enabled_regions",
+        action="append",
+        default=[],
+        help="enable a region by ID or name; repeat or use comma-separated values",
+    )
+    setup.add_argument(
+        "--default-region",
+        dest="setup_default_region",
+        help="default region ID or name selected from enabled regions",
+    )
+    setup.add_argument(
+        "--region-scheduler",
+        dest="setup_region_schedulers",
+        action="append",
+        default=[],
+        metavar="REGION=SCHEDULER",
+        help="scheduler selection for an enabled region; repeat as needed",
+    )
 
     sub.add_parser("doctor")
     sub.add_parser("inventory")
@@ -413,15 +433,59 @@ def apply_user_config(args):
     )
     openapi = config.get("openapi")
     openapi = openapi if isinstance(openapi, dict) else {}
-    args.region = _configured_value(
-        args.region,
-        "SCNET_OPENAPI_REGION_ID",
-        openapi.get("default_region_id"),
+    explicit_region = args.region or os.environ.get(
+        "SCNET_OPENAPI_REGION_ID"
     )
+    selected_region = explicit_region or openapi.get("default_region_id")
+    regions = openapi.get("regions")
+    regions = regions if isinstance(regions, dict) else {}
+    enabled = openapi.get("enabled_region_ids")
+    enabled_ids = (
+        {str(region_id) for region_id in enabled}
+        if isinstance(enabled, list)
+        else set()
+    )
+    if selected_region:
+        requested = str(selected_region)
+        resolved_region = None
+        if requested in regions or requested in enabled_ids:
+            resolved_region = requested
+        else:
+            for region_id, metadata in regions.items():
+                if (
+                    isinstance(metadata, dict)
+                    and str(metadata.get("name")) == requested
+                ):
+                    resolved_region = str(region_id)
+                    break
+        if enabled_ids:
+            if resolved_region is None or resolved_region not in enabled_ids:
+                raise SystemExit(
+                    "OpenAPI region %r is not enabled; run "
+                    "`scnet-ocrdrop setup modify`" % requested
+                )
+        args.region = resolved_region or requested
+    else:
+        args.region = None
+    region_config = (
+        regions.get(str(args.region), {})
+        if args.region is not None
+        else {}
+    )
+    region_config = (
+        region_config if isinstance(region_config, dict) else {}
+    )
+    saved_scheduler = region_config.get("scheduler_id")
+    if (
+        not saved_scheduler
+        and str(args.region or "")
+        == str(openapi.get("default_region_id") or "")
+    ):
+        saved_scheduler = openapi.get("scheduler_id")
     args.scheduler_id = _configured_value(
         args.scheduler_id,
         "SCNET_OPENAPI_SCHEDULER_ID",
-        openapi.get("scheduler_id"),
+        saved_scheduler,
     )
     return args
 

@@ -47,6 +47,7 @@ flowchart LR
 - `SSHTransport` 保留原有 SSH/SCP 行为；
 - `OpenAPITransport` 负责区域发现、efile 文件传输和 HPC 控制作业；
 - transport 不改变远端队列、worker、merge 或 OCR backend 契约；
+- setup 可以启用多个 OpenAPI 区域，但每个操作只解析一个显式或默认区域；
 - OpenAPI 的 `wait` 直接读取 manifest 和 queue，不为轮询重复提交作业。
 
 ### Remote controller

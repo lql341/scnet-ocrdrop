@@ -35,9 +35,11 @@ PaddleOCR。
 
 1. 询问 SCNet 平台用户名、AccessKey 和 SecretKey；
 2. 验证凭据并自动发现可用 HPC 区域与 scheduler；
-3. 选择默认 OCR backend；
-4. 在 macOS 使用 Keychain、在 Linux 使用 Secret Service 保存 AK/SK；
-5. 只把区域、scheduler 和 backend 等非敏感选择写入本机配置。
+3. 多选在本机启用的区域，再单选一个默认区域；
+4. 为每个启用区域选择 scheduler；
+5. 选择默认 OCR backend；
+6. 在 macOS 使用 Keychain、在 Linux 使用 Secret Service 保存 AK/SK；
+7. 只把区域、scheduler 和 backend 等非敏感选择写入本机配置。
 
 本机配置位于 `$XDG_CONFIG_HOME/scnet-ocrdrop/config.json` 或
 `~/.config/scnet-ocrdrop/config.json`。目录权限为 `0700`，文件权限为 `0600`。
@@ -59,6 +61,22 @@ export SCNET_OPENAPI_SECRET_KEY="<secret-key>"
 ./bin/scnet-ocrdrop setup reset
 ./bin/scnet-ocrdrop setup reset --credentials
 ```
+
+`setup modify` 会保留当前启用区域、默认区域和各区域 scheduler 作为交互默认值。
+非交互配置可以显式指定：
+
+```bash
+./bin/scnet-ocrdrop setup modify \
+  --enable-region 11250 \
+  --enable-region 11257 \
+  --default-region 11250 \
+  --region-scheduler 11250=<scheduler-id> \
+  --region-scheduler 11257=<scheduler-id>
+```
+
+一次 `push`、`deploy`、`retry` 或其他变更操作仍只使用一个区域。选择优先级为
+`--region`、`SCNET_OPENAPI_REGION_ID`、setup 保存的默认区域；未启用区域会被拒绝，
+需要先执行 `setup modify`。
 
 完成配置且远端 deployment 已存在后：
 

@@ -37,12 +37,54 @@ Keychain/Secret Service 的 service 名称与 `scnet-hpc` 兼容，因此两个�
 普通配置文件只保存：
 
 - transport 和默认 OCR backend；
+- 本机启用的区域 ID；
 - 默认区域 ID 与显示名称；
-- scheduler ID；
+- 每个启用区域的 scheduler 列表和选择；
 - home-relative deployment root；
 - 凭据 provider 名称。
 
 它不会保存 AK、SK、token、平台用户名、区域用户名或 home path。
+
+## 多区域选择
+
+交互式 setup 先多选本机启用区域，再从已启用区域中选择一个默认区域：
+
+```text
+选择在本机启用的 HPC 区域：
+  [x] 华东一区【昆山】
+  [x] 西北二区【甘肃】
+  [ ] 华东二区【合肥】
+
+默认区域：华东一区【昆山】
+```
+
+支持 ↑/↓ 移动、Space 勾选、`a` 全选、`n` 清空和 Enter 保存。非交互终端使用
+编号列表，例如 `1,3,5-8`。
+
+`setup modify` 会读取已有的 `enabled_region_ids`、`default_region_id` 和各区域
+`scheduler_id` 作为默认值。也可以显式执行：
+
+```bash
+scnet-ocrdrop setup modify \
+  --enable-region 11250,11257 \
+  --default-region 11250 \
+  --region-scheduler 11250=<scheduler-id>
+```
+
+运行命令时 region 选择优先级为：
+
+1. `--region`；
+2. `SCNET_OPENAPI_REGION_ID`；
+3. setup 保存的默认区域。
+
+指定区域后，scheduler 选择优先级为：
+
+1. `--scheduler-id`；
+2. `SCNET_OPENAPI_SCHEDULER_ID`；
+3. 该区域保存的 `scheduler_id`。
+
+未启用区域不会被静默使用。每次上传、部署或提交仍必须解析为一个明确区域，不会把
+同一次操作广播到多个区域。
 
 ## 远端路径
 
@@ -103,7 +145,8 @@ glibc 和其他 runtime 仍需预先存在，不能由本仓库恢复。
 ## 限制
 
 - OpenAPI live 行为依赖目标区域是否同时开放 HPC 和 efile 服务。
-- 一个区域有多个 scheduler 时必须在 setup 中明确选择。
+- 一个区域有多个 scheduler 时，必须在 setup 中为该区域明确选择。
+- setup 会发现所有授权区域；普通操作只刷新当前目标区域，不扫描其他启用区域。
 - 控制作业默认超时 10 分钟，可用 `--control-timeout` 调整。
 - deploy 和 submit 是有副作用的操作；网络超时后不要盲目重试，应先查询作业和文件。
 - 环境变量适合 CI 或一次性注入，不应写入 shell trace、公开日志或仓库文件。

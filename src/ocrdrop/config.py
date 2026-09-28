@@ -204,6 +204,12 @@ def reset_user_config() -> bool:
 def safe_config_summary(data: Dict[str, Any]) -> Dict[str, Any]:
     openapi = data.get("openapi")
     openapi = openapi if isinstance(openapi, dict) else {}
+    regions = openapi.get("regions")
+    regions = regions if isinstance(regions, dict) else {}
+    enabled = openapi.get("enabled_region_ids")
+    enabled = enabled if isinstance(enabled, list) else []
+    if not enabled and openapi.get("default_region_id"):
+        enabled = [str(openapi["default_region_id"])]
     ssh = data.get("ssh")
     ssh = ssh if isinstance(ssh, dict) else {}
     return {
@@ -211,6 +217,18 @@ def safe_config_summary(data: Dict[str, Any]) -> Dict[str, Any]:
         "default_ocr_backend": data.get("default_ocr_backend") or "mineru3",
         "ssh_alias_configured": bool(ssh.get("alias")),
         "openapi_region_configured": bool(openapi.get("default_region_id")),
+        "openapi_enabled_regions": [
+            {
+                "region_id": str(region_id),
+                "name": (
+                    regions.get(str(region_id), {}).get("name")
+                    if isinstance(regions.get(str(region_id)), dict)
+                    else None
+                ),
+            }
+            for region_id in enabled
+        ],
         "openapi_region_name": openapi.get("region_name"),
+        "openapi_default_region_id": openapi.get("default_region_id"),
         "credential_provider": openapi.get("credential_provider"),
     }

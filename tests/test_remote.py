@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -27,11 +28,13 @@ from ocrdrop.backends.paddleocr import record_to_lines
 from ocrdrop.config import config_path, load_user_config, save_user_config
 from ocrdrop.credentials import environment_credentials
 from ocrdrop.openapi import (
+    SCNetOpenAPI,
     OpenAPIError,
     canonical_signature,
     redact_error_detail,
     resolve_home_relative,
 )
+from ocrdrop import setup_cli
 from ocrdrop.transports import OpenAPITransport, _json_from_mixed_output
 
 
@@ -436,6 +439,270 @@ class OCRDropTest(unittest.TestCase):
         _, manifest = transport.status("batch-1")
         self.assertEqual(manifest["status"], "complete")
         self.assertEqual(manifest["counts"]["done"], 1)
+
+    def test_multi_region_number_parser(self):
+        self.assertEqual(
+            setup_cli._parse_multi_numbers("1,3,5-4", 5),
+            {0, 2, 3, 4},
+        )
+        with self.assertRaises(ValueError):
+            setup_cli._parse_multi_numbers("", 3)
+        with self.assertRaises(ValueError):
+            setup_cli._parse_multi_numbers("4", 3)
+
+    def test_setup_modify_preserves_multi_region_selection(self):
+        contexts = [
+            {
+                "region_id": "r1",
+                "region_name": "Region One",
+                "schedulers": [
+                    {"id": "s1", "name": "Scheduler One", "type": "slurm"}
+                ],
+            },
+            {
+                "region_id": "r2",
+                "region_name": "Region Two",
+                "schedulers": [
+                    {"id": "s2a", "name": "Scheduler A", "type": "slurm"},
+                    {"id": "s2b", "name": "Scheduler B", "type": "slurm"},
+                ],
+            },
+        ]
+        current = {
+            "transport": "openapi",
+            "default_ocr_backend": "mineru3",
+            "remote_roots": {
+                "mineru3": "softwares/projects/scnet-ocrdrop/deployments/mineru3"
+            },
+            "openapi": {
+                "enabled_region_ids": ["r1", "r2"],
+                "default_region_id": "r2",
+                "region_name": "Region Two",
+                "scheduler_id": "s2b",
+                "credential_provider": "test-store",
+                "regions": {
+                    "r1": {
+                        "name": "Region One",
+                        "scheduler_id": "s1",
+                    },
+                    "r2": {
+                        "name": "Region Two",
+                        "scheduler_id": "s2b",
+                    },
+                },
+            },
+        }
+        saved = []
+
+        class FakeAPI:
+            def __init__(self, **kwargs):
+                pass
+
+            def discover_contexts(self):
+                return contexts
+
+        args = SimpleNamespace(
+            transport="openapi",
+            ocr_backend="mineru3",
+            remote_root=None,
+            ssh=None,
+            api_timeout=30,
+            setup_action="modify",
+            region=None,
+            scheduler_id=None,
+            setup_enabled_regions=[],
+            setup_default_region=None,
+            setup_region_schedulers=[],
+        )
+        with patch.object(setup_cli, "load_user_config", return_value=current), patch.object(
+            setup_cli,
+            "load_openapi_credentials",
+            return_value=(
+                {"user": "u", "access_key": "a", "secret_key": "s"},
+                "test-store",
+            ),
+        ), patch.object(setup_cli, "SCNetOpenAPI", FakeAPI), patch.object(
+            setup_cli, "save_user_config", side_effect=saved.append
+        ), patch.object(
+            setup_cli.sys.stdin, "isatty", return_value=False
+        ):
+            self.assertEqual(setup_cli.configure(args), 0)
+
+        openapi = saved[0]["openapi"]
+        self.assertEqual(openapi["enabled_region_ids"], ["r1", "r2"])
+        self.assertEqual(openapi["default_region_id"], "r2")
+        self.assertEqual(openapi["regions"]["r1"]["scheduler_id"], "s1")
+        self.assertEqual(openapi["regions"]["r2"]["scheduler_id"], "s2b")
+        self.assertNotIn("home_path", json.dumps(openapi))
+        self.assertNotIn("username", json.dumps(openapi))
+
+    def test_setup_noninteractive_can_change_enabled_regions(self):
+        contexts = [
+            {
+                "region_id": "r1",
+                "region_name": "Region One",
+                "schedulers": [
+                    {"id": "s1", "name": "Scheduler One", "type": "slurm"}
+                ],
+            },
+            {
+                "region_id": "r2",
+                "region_name": "Region Two",
+                "schedulers": [
+                    {"id": "s2a", "name": "Scheduler A", "type": "slurm"},
+                    {"id": "s2b", "name": "Scheduler B", "type": "slurm"},
+                ],
+            },
+        ]
+        saved = []
+
+        class FakeAPI:
+            def __init__(self, **kwargs):
+                pass
+
+            def discover_contexts(self):
+                return contexts
+
+        args = SimpleNamespace(
+            transport="openapi",
+            ocr_backend="mineru3",
+            remote_root=None,
+            ssh=None,
+            api_timeout=30,
+            setup_action="modify",
+            region=None,
+            scheduler_id=None,
+            setup_enabled_regions=["r1,r2"],
+            setup_default_region="r2",
+            setup_region_schedulers=["r2=s2b"],
+        )
+        with patch.object(
+            setup_cli,
+            "load_user_config",
+            return_value={
+                "transport": "openapi",
+                "default_ocr_backend": "mineru3",
+                "remote_roots": {},
+            },
+        ), patch.object(
+            setup_cli,
+            "load_openapi_credentials",
+            return_value=(
+                {"user": "u", "access_key": "a", "secret_key": "s"},
+                "test-store",
+            ),
+        ), patch.object(setup_cli, "SCNetOpenAPI", FakeAPI), patch.object(
+            setup_cli, "save_user_config", side_effect=saved.append
+        ), patch.object(
+            setup_cli.sys.stdin, "isatty", return_value=False
+        ):
+            self.assertEqual(setup_cli.configure(args), 0)
+
+        openapi = saved[0]["openapi"]
+        self.assertEqual(openapi["default_region_id"], "r2")
+        self.assertEqual(openapi["scheduler_id"], "s2b")
+        self.assertEqual(openapi["regions"]["r2"]["scheduler_id"], "s2b")
+
+    def test_client_uses_scheduler_for_selected_region(self):
+        args = SimpleNamespace(
+            transport=None,
+            ocr_backend=None,
+            remote_root=None,
+            ssh=None,
+            region="Region Two",
+            scheduler_id=None,
+        )
+        config = {
+            "transport": "openapi",
+            "default_ocr_backend": "mineru3",
+            "remote_roots": {
+                "mineru3": "softwares/projects/scnet-ocrdrop/deployments/mineru3"
+            },
+            "openapi": {
+                "enabled_region_ids": ["r1", "r2"],
+                "default_region_id": "r1",
+                "scheduler_id": "s1",
+                "regions": {
+                    "r1": {
+                        "name": "Region One",
+                        "scheduler_id": "s1",
+                    },
+                    "r2": {
+                        "name": "Region Two",
+                        "scheduler_id": "s2",
+                    },
+                },
+            },
+        }
+        with patch.object(
+            mineru_drop_client, "load_user_config", return_value=config
+        ), patch.dict("os.environ", {}, clear=True):
+            mineru_drop_client.apply_user_config(args)
+        self.assertEqual(args.region, "r2")
+        self.assertEqual(args.scheduler_id, "s2")
+
+    def test_client_rejects_region_not_enabled_by_setup(self):
+        args = SimpleNamespace(
+            transport=None,
+            ocr_backend=None,
+            remote_root=None,
+            ssh=None,
+            region="r3",
+            scheduler_id=None,
+        )
+        config = {
+            "transport": "openapi",
+            "default_ocr_backend": "mineru3",
+            "remote_roots": {
+                "mineru3": "softwares/projects/scnet-ocrdrop/deployments/mineru3"
+            },
+            "openapi": {
+                "enabled_region_ids": ["r1", "r2"],
+                "default_region_id": "r1",
+                "regions": {
+                    "r1": {"name": "Region One", "scheduler_id": "s1"},
+                    "r2": {"name": "Region Two", "scheduler_id": "s2"},
+                },
+            },
+        }
+        with patch.object(
+            mineru_drop_client, "load_user_config", return_value=config
+        ), patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(SystemExit) as caught:
+                mineru_drop_client.apply_user_config(args)
+        self.assertIn("not enabled", str(caught.exception))
+
+    def test_resolve_context_only_discovers_selected_region(self):
+        api = SCNetOpenAPI(
+            credentials={"user": "u", "access_key": "a", "secret_key": "s"}
+        )
+        context = {
+            "region_id": "r2",
+            "region_name": "Region Two",
+            "username": "region-user",
+            "home_path": "/public/home/EXAMPLE_USER",
+            "hpc_url": "https://hpc.example.invalid",
+            "efile_url": "https://efile.example.invalid",
+            "token": "temporary",
+            "schedulers": [
+                {"id": "s2", "name": "Scheduler Two", "type": "slurm"}
+            ],
+        }
+        with patch.object(
+            api,
+            "select_region",
+            return_value={"clusterId": "r2", "token": "temporary"},
+        ), patch.object(
+            api, "discover_context", return_value=context
+        ) as discover, patch.object(
+            api,
+            "discover_contexts",
+            side_effect=AssertionError("must not scan all regions"),
+        ):
+            result = api.resolve_context("r2", "s2")
+        discover.assert_called_once_with("r2")
+        self.assertEqual(result["region_id"], "r2")
+        self.assertEqual(result["scheduler_id"], "s2")
 
 
 if __name__ == "__main__":

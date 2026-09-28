@@ -5,6 +5,8 @@
 - Add SCNet OpenAPI authentication, region discovery, file transfer, and
   control-job transport.
 - Add `setup new|modify|status|reset` configuration lifecycle.
+- Add multi-region enablement, one default region, per-region scheduler
+  selection, and modify-time preservation of existing choices.
 - Store AK/SK in macOS Keychain or Linux Secret Service, with environment
   injection as the non-persistent fallback.
 - Store only non-secret, home-relative metadata in the XDG configuration
