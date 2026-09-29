@@ -576,57 +576,140 @@ ocrdrop-results/<backend>/<batch-id>/output/<document-id>/
 └── chunks/
 ```
 
-### 批量提交
+## 批量处理
 
-多个文件：
+一次 `push` 会创建一个 batch。batch 可以包含多个 PDF；每个 PDF 会根据页数保持整篇
+处理，或拆成多个 chunk。所有输入仍在同一个已选择的 transport、region 和 backend
+上执行。
+
+### 目录或多个文件
+
+传入多个文件：
 
 ```bash
-./bin/scnet-ocrdrop push a.pdf b.pdf c.pdf
+./bin/kunshan-mineru3 push \
+  paper-a.pdf \
+  paper-b.pdf \
+  paper-c.pdf
 ```
 
-目录递归发现 PDF：
+传入目录时会递归发现 `.pdf` 和 `.PDF`：
 
 ```bash
-./bin/scnet-ocrdrop push /path/to/papers/
+./bin/kunshan-mineru3 push /path/to/papers/
 ```
 
-单个长文档默认使用一个持久 worker，避免多个 worker 重复加载同一套模型。多个文档
-默认最多使用配置中的 `max_workers` 并行处理。
-
-### 调整分片
+推荐的同步批处理写法是一次完成提交、等待和下载：
 
 ```bash
-./bin/scnet-ocrdrop push book.pdf \
+./bin/kunshan-mineru3 push /path/to/papers/ \
+  --workers 4 \
+  --wait \
+  --fetch \
+  --output ./ocrdrop-results/mineru3/batch-001
+```
+
+OpenAPI transport 使用同样的 batch 语义；一次操作只选择一个明确 region：
+
+```bash
+./bin/scnet-ocrdrop \
+  --transport openapi \
+  --ocr-backend mineru3 \
+  --region 11250 \
+  push /path/to/papers/ \
+  --workers 4 \
+  --wait \
+  --fetch \
+  --output ./ocrdrop-results/region-11250/batch-001
+```
+
+### worker 和长文档分片
+
+`--workers` 控制并行 Slurm worker 数量，但实际数量不会超过远端配置中的
+`max_workers`。
+
+- 多个独立 PDF：默认最多使用 `max_workers` 并行处理。
+- 单个长 PDF：默认使用一个持久 worker，避免每个 worker 重复加载模型。
+- 如果希望并行处理长 PDF，可以显式指定更多 worker；代价是模型可能在多个 worker
+  中重复加载。
+
+```bash
+./bin/kunshan-mineru3 push book.pdf \
   --workers 2 \
   --chunk-pages 64 \
-  --whole-document-pages 96
+  --whole-document-pages 96 \
+  --wait \
+  --fetch \
+  --output ./ocrdrop-results/mineru3/book
 ```
 
 - 页数不超过 `whole_document_pages`：整篇解析。
 - 更长文档：按 `chunk_pages` 切分。
 - 分片不重叠；跨边界段落和表格需要人工复核。
 
+### 异步批处理
+
+不等待结果时，先提交并记录输出中的 `batch_id`：
+
+```bash
+./bin/kunshan-mineru3 push /path/to/papers/ --workers 4
+```
+
+之后使用同一个 backend root 查询：
+
+```bash
+./bin/kunshan-mineru3 status --batch <batch-id>
+./bin/kunshan-mineru3 wait --batch <batch-id>
+./bin/kunshan-mineru3 fetch \
+  --batch <batch-id> \
+  --output ./ocrdrop-results/mineru3/<batch-id>
+```
+
+`wait` 结束后再执行 `fetch`；如果提交命令使用的是 OpenAPI，则后续命令也必须使用
+同一个 region 和 OpenAPI transport。
+
 ### 只查看计划
 
 ```bash
-./bin/scnet-ocrdrop push papers/ --plan-only
+./bin/kunshan-mineru3 push /path/to/papers/ --plan-only
 ```
+
+`--plan-only` 只生成任务计划，不提交 Slurm worker；它仍会先把输入上传到远端 inbox，
+以便远端读取页数和生成 manifest。
 
 ### 失败后重试
 
+只重试失败分片：
+
 ```bash
-./bin/scnet-ocrdrop retry --batch <batch-id>
+./bin/kunshan-mineru3 retry --batch <batch-id>
 ```
 
-如果原 Slurm 作业已结束，但任务因节点故障留在 `running/`：
+如果原 Slurm 作业已经结束，但任务因节点故障留在 `running/`，确认原 worker 已经结束
+后再执行：
 
 ```bash
-./bin/scnet-ocrdrop retry \
+./bin/kunshan-mineru3 retry \
   --batch <batch-id> \
   --include-running
 ```
 
-必须先确认原 worker 已经结束，避免两个 worker 同时写同一个分片。
+不要在原 worker 仍运行时使用 `--include-running`，避免两个 worker 同时写同一个分片。
+
+### 多区域
+
+一次 batch 不会自动广播到多个 region。需要使用不同区域时，分别提交并使用不同的
+输出目录：
+
+```bash
+./bin/scnet-ocrdrop --transport openapi --region 11250 \
+  push papers/ --workers 4 --wait --fetch \
+  --output ./ocrdrop-results/region-11250
+
+./bin/scnet-ocrdrop --transport openapi --region 11257 \
+  push papers/ --workers 4 --wait --fetch \
+  --output ./ocrdrop-results/region-11257
+```
 
 ## 状态含义
 
